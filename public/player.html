@@ -86,6 +86,7 @@
         let myName = localStorage.getItem('hangman_nickname') || '';
         let isMyTurn = false;
         let selectedChar = null;
+        let penaltyTimer = null; // 패널티 카운트다운 타이머 객체 저장용
 
         const consonants = ['ㄱ','ㄴ','ㄷ','ㄹ','ㅁ','ㅂ','ㅅ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
         const doubleConsonants = ['ㄲ','ㄸ','ㅃ','ㅆ','ㅉ'];
@@ -243,11 +244,29 @@
             alert('기회를 모두 소진하여 탈락하셨습니다.');
         });
 
+        /* 수정된 정답 제출 실패 시 카운트다운 타이머 처리 */
         socket.on('answer_failed', (penaltySec) => {
-            document.getElementById('penaltyMsg').innerText = `틀렸습니다! ${penaltySec}초 동안 단어 정답을 제출할 수 없습니다.`;
-            setTimeout(() => {
-                document.getElementById('penaltyMsg').innerText = '';
-            }, penaltySec * 1000);
+            if (penaltyTimer) clearInterval(penaltyTimer);
+
+            let remainingTime = penaltySec;
+            const penaltyMsgEl = document.getElementById('penaltyMsg');
+
+            const updateMsg = () => {
+                if (remainingTime > 0) {
+                    penaltyMsgEl.innerText = `틀렸습니다! ${remainingTime}초 동안 단어 정답을 제출할 수 없습니다.`;
+                } else {
+                    penaltyMsgEl.innerText = '';
+                    clearInterval(penaltyTimer);
+                    penaltyTimer = null;
+                }
+            };
+
+            updateMsg();
+
+            penaltyTimer = setInterval(() => {
+                remainingTime--;
+                updateMsg();
+            }, 1000);
         });
 
         socket.on('answer_penalty', (timeLeft) => {
