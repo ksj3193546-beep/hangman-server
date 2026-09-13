@@ -18,10 +18,8 @@
         .category-title { font-size: 0.8rem; font-weight: bold; color: #7f8c8d; margin: 10px 0 4px 0; border-bottom: 1px solid #eee; padding-bottom: 2px; }
         .char-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
         
-        /* 기본 버튼 디자인 */
         .char-btn { aspect-ratio: 1; border: 1px solid #e0e0e0; border-radius: 6px; background: #f9f9f9; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
         
-        /* 시도된 자모음 O/X 시각 스타일 */
         .char-btn.state-O { background: #2ecc71 !important; color: white !important; border-color: #27ae60 !important; cursor: not-allowed; }
         .char-btn.state-X { background: #e74c3c !important; color: white !important; border-color: #c0392b !important; opacity: 0.6; cursor: not-allowed; }
 
@@ -46,7 +44,7 @@
         
         <div id="turnNotice" style="text-align: center; font-weight: bold; margin: 12px 0;">대기 중...</div>
         
-        <!-- 순서대로 채워지는 빈칸 판 -->
+        <!-- 게임 시작 즉시 자모음 총 개수만큼 빈칸이 초기 배치됨 -->
         <div class="slots-grid" id="slotsContainer"></div>
 
         <div id="actionBtns" class="hidden" style="text-align: center; margin-bottom: 12px;">
@@ -182,7 +180,7 @@
             Object.keys(currentTriedChars).forEach(ch => {
                 const btn = document.getElementById(`btn-${ch}`);
                 if(btn) {
-                    const status = currentTriedChars[ch]; // 'O' 또는 'X'
+                    const status = currentTriedChars[ch];
                     btn.className = `char-btn state-${status}`;
                 }
             });
@@ -194,7 +192,7 @@
             const card = document.getElementById('gameArea');
 
             if(isMyTurn) {
-                notice.innerText = "🎯 당신의 턴입니다!";
+                notice.innerText = "🎯 당신의 턴입니다! (자모음 시도 또는 패스)";
                 notice.style.color = "#27ae60";
                 card.classList.add('my-turn');
                 document.getElementById('actionBtns').classList.remove('hidden');
