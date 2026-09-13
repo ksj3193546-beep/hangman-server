@@ -5,11 +5,14 @@
     <title>행맨 - 마스터 패널</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #f8f9fa; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #f8f9fa; }
         .box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        input, button { padding: 10px; font-size: 1rem; margin-top: 5px; }
+        button { padding: 12px 20px; font-size: 1rem; font-weight: bold; border-radius: 6px; border: none; cursor: pointer; }
+        .start-btn { background: #27ae60; color: white; }
+        .reset-btn { background: #7f8c8d; color: white; }
         .player-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
         .lives { font-weight: bold; color: #e74c3c; }
+        .notice-badge { background: #f39c12; color: white; padding: 8px 12px; border-radius: 6px; display: inline-block; font-weight: bold; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -17,10 +20,14 @@
     <h2>👑 출제자(Master) 현황판</h2>
 
     <div class="box">
-        <h3>1. 문제 출제</h3>
-        <input type="text" id="targetWordInput" placeholder="단어 입력 (예: 사과)">
-        <button id="startBtn" onclick="startGame()">게임 시작 및 대기열 마감</button>
-        <button onclick="resetGame()" style="background: #7f8c8d; color: white;">전체 초기화</button>
+        <h3>1. 무작위 단어 자동 출제</h3>
+        <button id="startBtn" class="start-btn" onclick="startGame()">게임 시작 및 대기열 마감</button>
+        <button class="reset-btn" onclick="resetGame()">전체 초기화</button>
+        
+        <div id="wordInfo" style="margin-top: 15px; display: none;">
+            <p><strong>출제된 단어:</strong> <span id="targetWordText" style="color: #2980b9; font-size: 1.2rem;"></span></p>
+            <div id="vowelNotice" class="notice-badge" style="display: none;">💡 힌트: 복모음 포함됨</div>
+        </div>
     </div>
 
     <div class="box">
@@ -33,9 +40,7 @@
         socket.emit('register_master');
 
         function startGame() {
-            const word = document.getElementById('targetWordInput').value.trim();
-            if(!word) return alert('단어를 입력하세요!');
-            socket.emit('start_game', word);
+            socket.emit('start_game');
             document.getElementById('startBtn').disabled = true;
         }
 
@@ -43,9 +48,21 @@
             if(confirm("정말 게임을 초기화하시겠습니까?")) {
                 socket.emit('reset_game');
                 document.getElementById('startBtn').disabled = false;
-                document.getElementById('targetWordInput').value = '';
+                document.getElementById('wordInfo').style.display = 'none';
             }
         }
+
+        socket.on('word_generated', (data) => {
+            document.getElementById('wordInfo').style.display = 'block';
+            document.getElementById('targetWordText').innerText = data.word;
+            
+            const vowelNotice = document.getElementById('vowelNotice');
+            if (data.hasDoubleVowel) {
+                vowelNotice.style.display = 'inline-block';
+            } else {
+                vowelNotice.style.display = 'none';
+            }
+        });
 
         socket.on('update_player_list', (players) => {
             document.getElementById('playerCount').innerText = players.length;
