@@ -21,7 +21,7 @@ let gameState = {
     isGameStarted: false,
     targetWord: "",
     decomposedWord: [],
-    revealedSlots: [],     // 맞춘 순서대로 앞에서부터 채워지는 배열
+    revealedSlots: [],     // 맞춘 순서대로 채워진 글자들
     triedChars: {},        // 시도된 글자 상태 { 'ㄱ': 'O', 'ㄴ': 'X' }
     hasDoubleVowel: false,
     players: [],
@@ -147,14 +147,15 @@ io.on('connection', (socket) => {
         gameState.isGameStarted = true;
         gameState.targetWord = selectedWord;
         gameState.decomposedWord = decomposeHangul(selectedWord);
-        gameState.revealedSlots = []; // 초기 빈 상태
-        gameState.triedChars = {};    // 시도된 글자 초기화
+        gameState.revealedSlots = []; 
+        gameState.triedChars = {};    
         
         gameState.hasDoubleVowel = gameState.decomposedWord.some(char => DOUBLE_VOWELS.includes(char));
 
         gameState.players.sort(() => Math.random() - 0.5);
         gameState.turnIndex = 0;
 
+        // 마스터 및 플레이어 전원에게 초기 전체 빈칸 길이 전달
         io.to('master').emit('word_generated', {
             hasDoubleVowel: gameState.hasDoubleVowel,
             slots: gameState.revealedSlots,
@@ -177,13 +178,12 @@ io.on('connection', (socket) => {
     socket.on('try_char', (char) => {
         const player = gameState.players[gameState.turnIndex];
         if (!player || player.id !== socket.id) return;
-        if (gameState.triedChars[char]) return; // 이미 시도된 글자 무시
+        if (gameState.triedChars[char]) return; 
 
         const isHit = gameState.decomposedWord.includes(char);
 
         if (isHit) {
             gameState.triedChars[char] = 'O';
-            // 정답인 경우 맞춘 순서대로 앞에서부터 추가
             gameState.revealedSlots.push(char);
 
             io.emit('board_update', { 
@@ -194,7 +194,9 @@ io.on('connection', (socket) => {
                 hit: true 
             });
 
-            // 단어의 전체 초/중/종성 개수만큼 순서대로 채워졌으면 성공 검사도 가능
+            // 정답을 맞춘 경우: 턴을 변경하지 않고 타이머만 리셋하여 연속 플레이 가능하게 함
+            startTurnTimer();
+
         } else {
             gameState.triedChars[char] = 'X';
             player.lives--;
@@ -211,6 +213,8 @@ io.on('connection', (socket) => {
             if (player.lives <= 0) {
                 socket.emit('eliminated');
             }
+            
+            // 오답인 경우: 다음 사람으로 턴 이동
             nextTurn();
         }
     });
