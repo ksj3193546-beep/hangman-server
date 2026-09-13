@@ -2,104 +2,85 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>행맨 - 메인 화면 (Master)</title>
-    <script src="/socket.io/socket.io.js"></script>
+    <title>마스터 화면</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 700px; margin: 0 auto; background: #f8f9fa; }
-        .box { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px; }
-        button { padding: 12px 20px; font-size: 1rem; font-weight: bold; border-radius: 6px; border: none; cursor: pointer; }
-        .start-btn { background: #27ae60; color: white; }
-        .reset-btn { background: #7f8c8d; color: white; }
-        .slots-grid { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 20px 0; }
-        .slot { width: 45px; height: 55px; border: 2px solid #333; border-radius: 8px; font-size: 1.8rem; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #fff; }
-        .player-item { display: flex; justify-content: space-between; padding: 12px; border-radius: 8px; margin-bottom: 8px; background: #f1f2f6; }
-        .player-item.active-turn { border: 2px solid #27ae60; background: #e8f8f5; font-weight: bold; }
-        .lives { font-weight: bold; color: #e74c3c; }
-        .notice-badge { background: #f39c12; color: white; padding: 8px 12px; border-radius: 6px; display: inline-block; font-weight: bold; }
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
+        .box { background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .slot-container { display: flex; gap: 8px; margin-top: 10px; }
+        .slot { width: 45px; height: 45px; border: 2px solid #333; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; background: #fff; }
+        .active-turn { font-weight: bold; color: blue; }
     </style>
 </head>
 <body>
-
-    <h2>🖥️ 행맨 메인 게임 화면</h2>
-
-    <div class="box" style="text-align: center;">
-        <button id="startBtn" class="start-btn" onclick="startGame()">게임 시작 및 참가 마감</button>
-        <button class="reset-btn" onclick="resetGame()">게임 초기화</button>
-        
-        <div id="vowelNotice" class="notice-badge" style="display: none; margin-top: 15px;">💡 힌트: 복모음 포함됨</div>
-        
-        <div class="slots-grid" id="masterSlots"></div>
+    <h1>게임 마스터 화면</h1>
+    <div class="box">
+        <button onclick="startGame()">게임 시작 / 단어 뽑기</button>
+        <button onclick="resetGame()">게임 리셋</button>
     </div>
 
     <div class="box">
-        <h3>👥 플레이어 순서 및 남은 기회 (<span id="playerCount">0</span>명)</h3>
-        <div id="playerList" style="margin-top: 15px;"></div>
+        <h2>단어 슬롯 상태 (<span id="vowelInfo">-</span>)</h2>
+        <div id="slotContainer" class="slot-container"></div>
     </div>
 
+    <div class="box">
+        <h2>현재 진행 상황</h2>
+        <p>남은 시간: <b id="timer">30</b>초</p>
+        <p>현재 턴: <b id="currentTurn">-</b></p>
+    </div>
+
+    <div class="box">
+        <h2>참여자 목록</h2>
+        <ul id="playerList"></ul>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let currentTurnIdx = -1;
-
         socket.emit('register_master');
 
-        function startGame() {
-            socket.emit('start_game');
-            document.getElementById('startBtn').disabled = true;
-        }
-
-        function resetGame() {
-            if(confirm("게임을 초기화하시겠습니까?")) {
-                socket.emit('reset_game');
-            }
-        }
+        function startGame() { socket.emit('start_game'); }
+        function resetGame() { socket.emit('reset_game'); }
 
         socket.on('word_generated', (data) => {
-            const vowelNotice = document.getElementById('vowelNotice');
-            vowelNotice.style.display = data.hasDoubleVowel ? 'inline-block' : 'none';
-            renderSlots(data.slots, data.decomposedCount);
+            document.getElementById('vowelInfo').textContent = data.hasDoubleVowel ? "이중모음 포함됨" : "이중모음 없음";
+            renderSlots(data.slots);
         });
 
         socket.on('board_update', (data) => {
-            renderSlots(data.slots, data.decomposedCount);
+            renderSlots(data.slots);
         });
 
-        function renderSlots(slots, totalCount) {
-            const container = document.getElementById('masterSlots');
-            let html = '';
-            for (let i = 0; i < totalCount; i++) {
-                const char = slots[i] || '_';
-                html += `<div class="slot">${char}</div>`;
-            }
-            container.innerHTML = html;
-        }
-
-        socket.on('update_player_list', (players) => {
-            document.getElementById('playerCount').innerText = players.length;
-            renderPlayerList(players);
+        socket.on('timer_tick', (time) => {
+            document.getElementById('timer').textContent = time;
         });
 
         socket.on('turn_update', (data) => {
-            currentTurnIdx = data.turnIndex;
-            socket.emit('register_master');
+            if(data.currentTurnPlayer) {
+                document.getElementById('currentTurn').textContent = data.currentTurnPlayer.name;
+            }
         });
 
-        function renderPlayerList(players) {
+        socket.on('update_player_list', (players) => {
             const list = document.getElementById('playerList');
-            list.innerHTML = players.map((p, idx) => `
-                <div class="player-item ${idx === currentTurnIdx ? 'active-turn' : ''}">
-                    <span>${idx + 1}순위: ${p.name} ${idx === currentTurnIdx ? '🎯 (현재 턴)' : ''} ${p.lives <= 0 ? '❌(탈락)' : ''}</span>
-                    <span class="lives">기회: ${'❤️'.repeat(Math.max(0, p.lives))} (${p.lives}/5)</span>
-                </div>
-            `).join('');
+            list.innerHTML = '';
+            players.forEach(p => {
+                const li = document.createElement('li');
+                li.textContent = `${p.name} (남은 목숨: ${p.lives})`;
+                list.appendChild(li);
+            });
+        });
+
+        function renderSlots(slots) {
+            const container = document.getElementById('slotContainer');
+            container.innerHTML = '';
+            slots.forEach(char => {
+                const div = document.createElement('div');
+                div.className = 'slot';
+                div.textContent = char || '';
+                container.appendChild(div);
+            });
         }
-
-        socket.on('game_won', (data) => {
-            alert(`🎉 게임 종료! 승리자: ${data.winner}\n정답: ${data.word}`);
-        });
-
-        socket.on('game_reset', () => {
-            location.reload();
-        });
     </script>
 </body>
 </html>
