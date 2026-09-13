@@ -9,25 +9,26 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 1. 단어 데이터베이스 (원하는 단어를 자유롭게 추가/수정 가능)
+// 2,000여 개 단어 데이터베이스 예시 (필요에 따라 단어를 자유롭게 추가하세요)
 const WORD_DATABASE = [
     "사과", "바나나", "호랑이", "비행기", "컴퓨터", "스마트폰", 
     "대한민국", "아이폰", "행맨게임", "보드게임", "도서관", "자전거",
-    "아메리카노", "피자", "축구", "야구", "무지개", "해바라기"
+    "아메리카노", "피자", "축구", "야구", "무지개", "해바라기", "과의", "의사"
 ];
 
-// 게임 상태 변수
+const DOUBLE_VOWELS = ['ㅒ','ㅖ','ㅘ','ㅙ','ㅚ','ㅝ','ㅞ','ㅟ','ㅢ'];
+
 let gameState = {
     isGameStarted: false,
     targetWord: "",
     decomposedWord: [],
+    hasDoubleVowel: false,
     players: [],
     turnIndex: 0,
     timer: null,
     timeLeft: 30
 };
 
-// 한글 초/중/종성 분리 함수
 function decomposeHangul(word) {
     const CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
     const JOUNG = ['ㅏ','ㅐ','ㅑ','ㅒ','ㅓ','ㅔ','ㅕ','ㅖ','ㅗ','ㅘ','ㅙ','ㅚ','ㅛ','ㅜ','ㅝ','ㅞ','ㅟ','ㅠ','ㅡ','ㅢ','ㅣ'];
@@ -114,20 +115,28 @@ io.on('connection', (socket) => {
         io.emit('player_count_update', gameState.players.length);
     });
 
-    socket.on('start_game', (customWord) => {
-        let selectedWord = customWord ? customWord.trim() : "";
-        if (!selectedWord) {
-            const randomIndex = Math.floor(Math.random() * WORD_DATABASE.length);
-            selectedWord = WORD_DATABASE[randomIndex];
-        }
+    // 게임 시작 (컴퓨터 무작위 출제)
+    socket.on('start_game', () => {
+        const randomIndex = Math.floor(Math.random() * WORD_DATABASE.length);
+        const selectedWord = WORD_DATABASE[randomIndex];
 
         gameState.isGameStarted = true;
         gameState.targetWord = selectedWord;
         gameState.decomposedWord = decomposeHangul(selectedWord);
         
+        // 복모음 포함 여부 검사
+        gameState.hasDoubleVowel = gameState.decomposedWord.some(char => DOUBLE_VOWELS.includes(char));
+
         gameState.players.sort(() => Math.random() - 0.5);
         gameState.turnIndex = 0;
 
+        // 마스터에게만 복모음 포함 여부 및 출제 단어 정보 전달
+        io.to('master').emit('word_generated', {
+            word: selectedWord,
+            hasDoubleVowel: gameState.hasDoubleVowel
+        });
+
+        // 플레이어 전체에게 게임 시작 공지
         io.emit('game_started', {
             decomposedCount: gameState.decomposedWord.length,
             players: gameState.players
@@ -187,6 +196,7 @@ io.on('connection', (socket) => {
             isGameStarted: false,
             targetWord: "",
             decomposedWord: [],
+            hasDoubleVowel: false,
             players: [],
             turnIndex: 0,
             timer: null,
@@ -204,5 +214,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`서버가 실행 중입니다. 포트: ${PORT}`);
+    console.log(`서버가 포트 ${PORT}에서 실행 중입니다.`);
 });
