@@ -21,7 +21,8 @@ let gameState = {
     isGameStarted: false,
     targetWord: "",
     decomposedWord: [],
-    revealedSlots: [], // 빈칸 상태 관리
+    revealedSlots: [],     // 맞춘 순서대로 앞에서부터 채워지는 배열
+    triedChars: {},        // 시도된 글자 상태 { 'ㄱ': 'O', 'ㄴ': 'X' }
     hasDoubleVowel: false,
     players: [],
     turnIndex: 0,
@@ -98,7 +99,9 @@ io.on('connection', (socket) => {
         if (gameState.isGameStarted) {
             socket.emit('word_generated', {
                 hasDoubleVowel: gameState.hasDoubleVowel,
-                slots: gameState.revealedSlots
+                slots: gameState.revealedSlots,
+                decomposedCount: gameState.decomposedWord.length,
+                triedChars: gameState.triedChars
             });
         }
     });
@@ -113,6 +116,7 @@ io.on('connection', (socket) => {
                 socket.emit('game_started', {
                     decomposedCount: gameState.decomposedWord.length,
                     slots: gameState.revealedSlots,
+                    triedChars: gameState.triedChars,
                     players: gameState.players
                 });
             }
@@ -143,7 +147,8 @@ io.on('connection', (socket) => {
         gameState.isGameStarted = true;
         gameState.targetWord = selectedWord;
         gameState.decomposedWord = decomposeHangul(selectedWord);
-        gameState.revealedSlots = Array(gameState.decomposedWord.length).fill('');
+        gameState.revealedSlots = []; // 초기 빈 상태
+        gameState.triedChars = {};    // 시도된 글자 초기화
         
         gameState.hasDoubleVowel = gameState.decomposedWord.some(char => DOUBLE_VOWELS.includes(char));
 
@@ -152,7 +157,9 @@ io.on('connection', (socket) => {
 
         io.to('master').emit('word_generated', {
             hasDoubleVowel: gameState.hasDoubleVowel,
-            slots: gameState.revealedSlots
+            slots: gameState.revealedSlots,
+            decomposedCount: gameState.decomposedWord.length,
+            triedChars: gameState.triedChars
         });
 
         io.to('master').emit('update_player_list', gameState.players);
@@ -160,6 +167,7 @@ io.on('connection', (socket) => {
         io.emit('game_started', {
             decomposedCount: gameState.decomposedWord.length,
             slots: gameState.revealedSlots,
+            triedChars: gameState.triedChars,
             players: gameState.players
         });
 
@@ -169,29 +177,36 @@ io.on('connection', (socket) => {
     socket.on('try_char', (char) => {
         const player = gameState.players[gameState.turnIndex];
         if (!player || player.id !== socket.id) return;
+        if (gameState.triedChars[char]) return; // 이미 시도된 글자 무시
 
-        let hitIndexes = [];
-        gameState.decomposedWord.forEach((c, idx) => {
-            if (c === char) hitIndexes.push(idx);
-        });
+        const isHit = gameState.decomposedWord.includes(char);
 
-        if (hitIndexes.length > 0) {
-            hitIndexes.forEach(idx => {
-                gameState.revealedSlots[idx] = char;
+        if (isHit) {
+            gameState.triedChars[char] = 'O';
+            // 정답인 경우 맞춘 순서대로 앞에서부터 추가
+            gameState.revealedSlots.push(char);
+
+            io.emit('board_update', { 
+                slots: gameState.revealedSlots, 
+                decomposedCount: gameState.decomposedWord.length,
+                triedChars: gameState.triedChars,
+                char, 
+                hit: true 
             });
 
-            io.emit('board_update', { slots: gameState.revealedSlots, char, hit: true });
-
-            if (!gameState.revealedSlots.includes('')) {
-                clearInterval(gameState.timer);
-                io.emit('game_won', { winner: player.name, word: gameState.targetWord });
-                return;
-            }
+            // 단어의 전체 초/중/종성 개수만큼 순서대로 채워졌으면 성공 검사도 가능
         } else {
+            gameState.triedChars[char] = 'X';
             player.lives--;
             io.emit('player_status_update', gameState.players);
             io.to('master').emit('update_player_list', gameState.players);
-            io.emit('board_update', { slots: gameState.revealedSlots, char, hit: false });
+            io.emit('board_update', { 
+                slots: gameState.revealedSlots, 
+                decomposedCount: gameState.decomposedWord.length,
+                triedChars: gameState.triedChars,
+                char, 
+                hit: false 
+            });
 
             if (player.lives <= 0) {
                 socket.emit('eliminated');
@@ -233,6 +248,7 @@ io.on('connection', (socket) => {
             targetWord: "",
             decomposedWord: [],
             revealedSlots: [],
+            triedChars: {},
             hasDoubleVowel: false,
             players: [],
             turnIndex: 0,
