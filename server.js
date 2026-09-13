@@ -9,7 +9,6 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 2,000여 개 단어 데이터베이스 예시 (필요에 따라 단어를 자유롭게 추가하세요)
 const WORD_DATABASE = [
     "사과", "바나나", "호랑이", "비행기", "컴퓨터", "스마트폰", 
     "대한민국", "아이폰", "행맨게임", "보드게임", "도서관", "자전거",
@@ -22,6 +21,7 @@ let gameState = {
     isGameStarted: false,
     targetWord: "",
     decomposedWord: [],
+    revealedSlots: [], // 빈칸 상태 관리
     hasDoubleVowel: false,
     players: [],
     turnIndex: 0,
@@ -57,6 +57,7 @@ function startTurnTimer() {
     gameState.timeLeft = 30;
     
     io.emit('turn_update', {
+        turnIndex: gameState.turnIndex,
         currentTurnPlayer: gameState.players[gameState.turnIndex],
         timeLeft: gameState.timeLeft
     });
@@ -94,28 +95,47 @@ io.on('connection', (socket) => {
     socket.on('register_master', () => {
         socket.join('master');
         socket.emit('update_player_list', gameState.players);
+        if (gameState.isGameStarted) {
+            socket.emit('word_generated', {
+                hasDoubleVowel: gameState.hasDoubleVowel,
+                slots: gameState.revealedSlots
+            });
+        }
     });
 
     socket.on('join_game', (playerName) => {
-        if (gameState.isGameStarted) {
-            socket.emit('join_error', '이미 게임이 시작되어 참가할 수 없습니다.');
-            return;
+        let existingPlayer = gameState.players.find(p => p.name === playerName);
+
+        if (existingPlayer) {
+            existingPlayer.id = socket.id;
+            socket.emit('join_success', existingPlayer);
+            if (gameState.isGameStarted) {
+                socket.emit('game_started', {
+                    decomposedCount: gameState.decomposedWord.length,
+                    slots: gameState.revealedSlots,
+                    players: gameState.players
+                });
+            }
+        } else {
+            if (gameState.isGameStarted) {
+                socket.emit('join_error', '이미 게임이 진행 중입니다.');
+                return;
+            }
+
+            const newPlayer = {
+                id: socket.id,
+                name: playerName,
+                lives: 5,
+                penaltyUntil: 0
+            };
+            gameState.players.push(newPlayer);
+
+            socket.emit('join_success', newPlayer);
+            io.to('master').emit('update_player_list', gameState.players);
+            io.emit('player_count_update', gameState.players.length);
         }
-
-        const newPlayer = {
-            id: socket.id,
-            name: playerName,
-            lives: 5,
-            penaltyUntil: 0
-        };
-        gameState.players.push(newPlayer);
-
-        socket.emit('join_success', newPlayer);
-        io.to('master').emit('update_player_list', gameState.players);
-        io.emit('player_count_update', gameState.players.length);
     });
 
-    // 게임 시작 (컴퓨터 무작위 출제)
     socket.on('start_game', () => {
         const randomIndex = Math.floor(Math.random() * WORD_DATABASE.length);
         const selectedWord = WORD_DATABASE[randomIndex];
@@ -123,22 +143,23 @@ io.on('connection', (socket) => {
         gameState.isGameStarted = true;
         gameState.targetWord = selectedWord;
         gameState.decomposedWord = decomposeHangul(selectedWord);
+        gameState.revealedSlots = Array(gameState.decomposedWord.length).fill('');
         
-        // 복모음 포함 여부 검사
         gameState.hasDoubleVowel = gameState.decomposedWord.some(char => DOUBLE_VOWELS.includes(char));
 
         gameState.players.sort(() => Math.random() - 0.5);
         gameState.turnIndex = 0;
 
-        // 마스터에게만 복모음 포함 여부 및 출제 단어 정보 전달
         io.to('master').emit('word_generated', {
-            word: selectedWord,
-            hasDoubleVowel: gameState.hasDoubleVowel
+            hasDoubleVowel: gameState.hasDoubleVowel,
+            slots: gameState.revealedSlots
         });
 
-        // 플레이어 전체에게 게임 시작 공지
+        io.to('master').emit('update_player_list', gameState.players);
+
         io.emit('game_started', {
             decomposedCount: gameState.decomposedWord.length,
+            slots: gameState.revealedSlots,
             players: gameState.players
         });
 
@@ -149,18 +170,33 @@ io.on('connection', (socket) => {
         const player = gameState.players[gameState.turnIndex];
         if (!player || player.id !== socket.id) return;
 
-        const isCorrect = gameState.decomposedWord.includes(char);
-        
-        if (!isCorrect) {
+        let hitIndexes = [];
+        gameState.decomposedWord.forEach((c, idx) => {
+            if (c === char) hitIndexes.push(idx);
+        });
+
+        if (hitIndexes.length > 0) {
+            hitIndexes.forEach(idx => {
+                gameState.revealedSlots[idx] = char;
+            });
+
+            io.emit('board_update', { slots: gameState.revealedSlots, char, hit: true });
+
+            if (!gameState.revealedSlots.includes('')) {
+                clearInterval(gameState.timer);
+                io.emit('game_won', { winner: player.name, word: gameState.targetWord });
+                return;
+            }
+        } else {
             player.lives--;
             io.emit('player_status_update', gameState.players);
-            
+            io.to('master').emit('update_player_list', gameState.players);
+            io.emit('board_update', { slots: gameState.revealedSlots, char, hit: false });
+
             if (player.lives <= 0) {
                 socket.emit('eliminated');
             }
             nextTurn();
-        } else {
-            io.emit('char_hit', { char, player: player.name });
         }
     });
 
@@ -196,6 +232,7 @@ io.on('connection', (socket) => {
             isGameStarted: false,
             targetWord: "",
             decomposedWord: [],
+            revealedSlots: [],
             hasDoubleVowel: false,
             players: [],
             turnIndex: 0,
@@ -206,9 +243,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        gameState.players = gameState.players.filter(p => p.id !== socket.id);
         io.to('master').emit('update_player_list', gameState.players);
-        io.emit('player_count_update', gameState.players.length);
     });
 });
 
