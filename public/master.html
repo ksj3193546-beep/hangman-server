@@ -28,7 +28,7 @@
         
         <div id="vowelNotice" class="notice-badge" style="display: none; margin-top: 15px;">💡 힌트: 복모음 포함됨</div>
         
-        <!-- 메인 공유 빈칸 판 -->
+        <!-- 맞춘 순서대로 앞에서부터 차곡차곡 채워지는 공유 빈칸 판 -->
         <div class="slots-grid" id="masterSlots"></div>
     </div>
 
@@ -57,16 +57,21 @@
         socket.on('word_generated', (data) => {
             const vowelNotice = document.getElementById('vowelNotice');
             vowelNotice.style.display = data.hasDoubleVowel ? 'inline-block' : 'none';
-            renderSlots(data.slots);
+            renderSlots(data.slots, data.decomposedCount);
         });
 
         socket.on('board_update', (data) => {
-            renderSlots(data.slots);
+            renderSlots(data.slots, data.decomposedCount);
         });
 
-        function renderSlots(slots) {
+        function renderSlots(slots, totalCount) {
             const container = document.getElementById('masterSlots');
-            container.innerHTML = slots.map(s => `<div class="slot">${s || '_'}</div>`).join('');
+            let html = '';
+            for (let i = 0; i < totalCount; i++) {
+                const char = slots[i] || '_';
+                html += `<div class="slot">${char}</div>`;
+            }
+            container.innerHTML = html;
         }
 
         socket.on('update_player_list', (players) => {
@@ -76,7 +81,7 @@
 
         socket.on('turn_update', (data) => {
             currentTurnIdx = data.turnIndex;
-            socket.emit('register_master'); // 상태 갱신 요청
+            socket.emit('register_master');
         });
 
         function renderPlayerList(players) {
