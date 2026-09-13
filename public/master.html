@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>행맨 - 마스터 패널</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #f8f9fa; }
+        .box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        input, button { padding: 10px; font-size: 1rem; margin-top: 5px; }
+        .player-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+        .lives { font-weight: bold; color: #e74c3c; }
+    </style>
+</head>
+<body>
+
+    <h2>👑 출제자(Master) 현황판</h2>
+
+    <div class="box">
+        <h3>1. 문제 출제</h3>
+        <input type="text" id="targetWordInput" placeholder="단어 입력 (예: 사과)">
+        <button id="startBtn" onclick="startGame()">게임 시작 및 대기열 마감</button>
+        <button onclick="resetGame()" style="background: #7f8c8d; color: white;">전체 초기화</button>
+    </div>
+
+    <div class="box">
+        <h3>2. 참가자 현황 (<span id="playerCount">0</span>명)</h3>
+        <div id="playerList"></div>
+    </div>
+
+    <script>
+        const socket = io();
+        socket.emit('register_master');
+
+        function startGame() {
+            const word = document.getElementById('targetWordInput').value.trim();
+            if(!word) return alert('단어를 입력하세요!');
+            socket.emit('start_game', word);
+            document.getElementById('startBtn').disabled = true;
+        }
+
+        function resetGame() {
+            if(confirm("정말 게임을 초기화하시겠습니까?")) {
+                socket.emit('reset_game');
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('targetWordInput').value = '';
+            }
+        }
+
+        socket.on('update_player_list', (players) => {
+            document.getElementById('playerCount').innerText = players.length;
+            const list = document.getElementById('playerList');
+            list.innerHTML = players.map(p => `
+                <div class="player-item">
+                    <span>${p.name} ${p.lives <= 0 ? '❌(탈락)' : ''}</span>
+                    <span class="lives">기회: ${'❤️'.repeat(Math.max(0, p.lives))} (${p.lives}/5)</span>
+                </div>
+            `).join('');
+        });
+
+        socket.on('game_won', (data) => {
+            alert(`🎉 게임 종료! 승리자: ${data.winner}\n정답: ${data.word}`);
+        });
+
+        socket.on('game_reset', () => {
+            location.reload();
+        });
+    </script>
+</body>
+</html>
