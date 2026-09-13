@@ -9,9 +9,7 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// =====================================================================
-// 1. 전달받은 전체 단어 데이터베이스 (중복 제거 적용)
-// =====================================================================
+// 1. 단어 데이터베이스
 const RAW_WORDS = [
     "사과", "바나나", "포도", "수박", "딸기", "복숭아", "오렌지", "토마토", "자몽", "메론", "참외", "석류", "유자", "자두", "앵두", "감귤", "라임", "레몬", "파인애플",
     "비행기", "자동차", "자전거", "지하철", "오토바이", "헬리콥터", "킥보드", "유람선", "잠수함", "트럭", "버스", "택시", "승용차", "경주차", "소방차", "구급차", "경찰차",
@@ -247,16 +245,15 @@ const RAW_WORDS = [
     "희망가", "흰색", "흰 구름", "흰 눈", "히터", "힐링", "힘"
 ];
 
-// Array.from(new Set(...))을 통해 중복된 단어를 자동으로 제거
-const WORD_DATABASE = Array.from(new Set(RAW_WORDS));
-
+// 공백 제거 및 중복 제거 처리 (핵심)
+const WORD_DATABASE = Array.from(new Set(RAW_WORDS.map(w => w.replace(/\s+/g, ''))));
 const DOUBLE_VOWELS = ['ㅒ','ㅖ','ㅘ','ㅙ','ㅚ','ㅝ','ㅞ','ㅟ','ㅢ'];
 
 let gameState = {
     isGameStarted: false,
     targetWord: "",
     decomposedWord: [],
-    revealedSlots: [], // 빈칸 상태 관리
+    revealedSlots: [],
     hasDoubleVowel: false,
     players: [],
     turnIndex: 0,
@@ -280,8 +277,6 @@ function decomposeHangul(word) {
             result.push(CHO[cho]);
             result.push(JOUNG[joung]);
             if (jong > 0) result.push(JONG[jong]);
-        } else {
-            result.push(word[i]);
         }
     }
     return result;
@@ -301,19 +296,13 @@ function startTurnTimer() {
         gameState.timeLeft--;
         io.emit('timer_tick', gameState.timeLeft);
 
-        // =====================================================================
-        // 2. 시간 초과 시 처리 (기회 차감 + 다음 턴)
-        // =====================================================================
         if (gameState.timeLeft <= 0) {
             const currentOptionPlayer = gameState.players[gameState.turnIndex];
             if (currentOptionPlayer && currentOptionPlayer.lives > 0) {
-                currentOptionPlayer.lives--; // 횟수(목숨) 차감
-
-                // 상태 업데이트 전송
+                currentOptionPlayer.lives--;
                 io.emit('player_status_update', gameState.players);
                 io.to('master').emit('update_player_list', gameState.players);
 
-                // 해당 플레이어가 탈락했는지 체크
                 if (currentOptionPlayer.lives <= 0) {
                     io.to(currentOptionPlayer.id).emit('eliminated');
                 }
@@ -500,5 +489,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`서버가 포트 ${PORT}에서 실행 중입니다.`);
+    console.log(`서버 동작 중: ${PORT}`);
 });
