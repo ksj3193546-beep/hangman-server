@@ -3,42 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>행맨 - 플레이어</title>
+    <title>행맨 - 플레이어 패드</title>
     <script src="/socket.io/socket.io.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; padding: 15px; max-width: 500px; margin: 0 auto; color: #333; }
-        
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 15px; }
         .status-bar { display: flex; justify-content: space-between; font-weight: bold; font-size: 1rem; align-items: center; }
         .timer { color: #e67e22; font-size: 1.2rem; }
         .my-turn { border: 3px solid #2ecc71; }
         .hidden { display: none; }
-        
-        /* 빈칸 현황판 */
         .slots-grid { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 15px 0; }
         .slot { width: 36px; height: 44px; border: 2px solid #bdc3c7; border-radius: 6px; font-size: 1.2rem; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #fafafa; }
-
-        /* 자모음 분류 패널 */
         .category-title { font-size: 0.8rem; font-weight: bold; color: #7f8c8d; margin: 10px 0 4px 0; border-bottom: 1px solid #eee; padding-bottom: 2px; }
         .char-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-        .char-btn { aspect-ratio: 1; border: 1px solid #e0e0e0; border-radius: 6px; background: #f9f9f9; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; }
-        
-        .char-btn.state-x { background: #e74c3c; color: white; border-color: #c0392b; }
-        .char-btn.state-o { background: #2ecc71; color: white; border-color: #27ae60; }
-
-        /* 모달 팝업 */
+        .char-btn { aspect-ratio: 1; border: 1px solid #e0e0e0; border-radius: 6px; background: #f9f9f9; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); justify-content: center; align-items: center; z-index: 100; }
         .modal-content { background: white; padding: 20px; border-radius: 12px; text-align: center; width: 280px; }
-        .modal-btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 15px; }
-        .modal-btn { padding: 10px 0; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; color: white; }
-        .btn-x { background: #e74c3c; }
-        .btn-num { background: #2ecc71; }
     </style>
 </head>
 <body>
 
-    <!-- 1. 입장 화면 -->
     <div id="loginArea" class="card">
         <h2>게임 참가</h2>
         <p style="margin: 10px 0;">현재 대기자: <span id="currentPlayers">0</span>명</p>
@@ -46,7 +31,6 @@
         <button onclick="joinGame()" style="padding: 10px 15px; font-size: 1rem; font-weight: bold; background: #27ae60; color: white; border: none; border-radius: 6px;">참가</button>
     </div>
 
-    <!-- 2. 게임 메인 화면 -->
     <div id="gameArea" class="card hidden">
         <div class="status-bar">
             <span>기회: <span id="myLives">❤️❤️❤️❤️❤️</span></span>
@@ -61,24 +45,19 @@
             <button onclick="passTurn()" style="background: #f39c12; color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: bold;">턴 넘기기(패스)</button>
         </div>
 
-        <!-- 기존 분류 형태의 자모음 전체 한눈에 보기 -->
         <div>
             <div class="category-title">단자음</div>
             <div class="char-grid" id="grid-consonants"></div>
-
             <div class="category-title">쌍자음</div>
             <div class="char-grid" id="grid-double-consonants"></div>
-
             <div class="category-title">단모음</div>
             <div class="char-grid" id="grid-vowels"></div>
-
             <div class="category-title">복모음</div>
             <div class="char-grid" id="grid-double-vowels"></div>
         </div>
 
         <hr style="margin: 15px 0;">
 
-        <!-- 정답 제출 -->
         <div style="text-align: center;">
             <input type="text" id="answerInput" placeholder="단어 정답 입력" style="padding: 8px; font-size: 0.95rem;">
             <button onclick="submitAnswer()" style="padding: 8px 12px; font-weight: bold;">정답 제출</button>
@@ -86,23 +65,20 @@
         </div>
     </div>
 
-    <!-- 모달 팝업 -->
     <div class="modal" id="selectModal">
         <div class="modal-content">
             <h3 id="modalTargetChar">ㄱ</h3>
-            <div class="modal-btns">
-                <button class="modal-btn btn-x" onclick="setCharState('X')">X</button>
-                <button class="modal-btn btn-num" onclick="setCharState(1)">1</button>
-                <button class="modal-btn btn-num" onclick="setCharState(2)">2</button>
-                <button class="modal-btn btn-num" onclick="setCharState(3)">3</button>
+            <p style="margin-top: 10px;">이 글자로 제출하시겠습니까?</p>
+            <div style="margin-top: 15px;">
+                <button onclick="confirmSubmit()" style="background: #27ae60; color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: bold;">제출</button>
+                <button onclick="closeModal()" style="padding: 8px 16px; border: none; border-radius: 6px;">취소</button>
             </div>
-            <button onclick="closeModal()" style="margin-top: 10px; padding: 5px 10px;">취소</button>
         </div>
     </div>
 
     <script>
         const socket = io();
-        let myName = '';
+        let myName = localStorage.getItem('hangman_nickname') || '';
         let isMyTurn = false;
         let selectedChar = null;
 
@@ -116,6 +92,11 @@
             renderGrid('grid-double-consonants', doubleConsonants);
             renderGrid('grid-vowels', vowels);
             renderGrid('grid-double-vowels', doubleVowels);
+
+            if (myName) {
+                document.getElementById('nicknameInput').value = myName;
+                socket.emit('join_game', myName);
+            }
         };
 
         function renderGrid(targetId, list) {
@@ -124,7 +105,6 @@
                 const btn = document.createElement('button');
                 btn.className = 'char-btn';
                 btn.innerText = ch;
-                btn.id = `btn-${ch}`;
                 btn.onclick = () => openModal(ch);
                 container.appendChild(btn);
             });
@@ -133,7 +113,7 @@
         function openModal(ch) {
             if(!isMyTurn) return alert("당신의 턴이 아닙니다!");
             selectedChar = ch;
-            document.getElementById('modalTargetChar').innerText = `'${ch}' 결과 선택`;
+            document.getElementById('modalTargetChar').innerText = `'${ch}'`;
             document.getElementById('selectModal').style.display = 'flex';
         }
 
@@ -141,7 +121,7 @@
             document.getElementById('selectModal').style.display = 'none';
         }
 
-        function setCharState(type) {
+        function confirmSubmit() {
             closeModal();
             if(selectedChar) {
                 socket.emit('try_char', selectedChar);
@@ -151,6 +131,7 @@
         function joinGame() {
             myName = document.getElementById('nicknameInput').value.trim();
             if(!myName) return alert('닉네임을 입력하세요!');
+            localStorage.setItem('hangman_nickname', myName);
             socket.emit('join_game', myName);
         }
 
@@ -166,12 +147,17 @@
         socket.on('join_error', msg => alert(msg));
 
         socket.on('game_started', (data) => {
-            const container = document.getElementById('slotsContainer');
-            container.innerHTML = '';
-            for(let i = 0; i < data.decomposedCount; i++) {
-                container.innerHTML += `<div class="slot"></div>`;
-            }
+            renderSlots(data.slots);
         });
+
+        socket.on('board_update', (data) => {
+            renderSlots(data.slots);
+        });
+
+        function renderSlots(slots) {
+            const container = document.getElementById('slotsContainer');
+            container.innerHTML = slots.map(s => `<div class="slot">${s || '_'}</div>`).join('');
+        }
 
         socket.on('turn_update', (data) => {
             isMyTurn = (data.currentTurnPlayer.name === myName);
@@ -229,6 +215,7 @@
 
         socket.on('eliminated', () => {
             alert('기회를 모두 소진하여 탈락하셨습니다.');
+            localStorage.removeItem('hangman_nickname');
             location.reload();
         });
 
@@ -237,6 +224,7 @@
         });
 
         socket.on('game_reset', () => {
+            localStorage.removeItem('hangman_nickname');
             alert('출제자가 게임을 초기화했습니다.');
             location.reload();
         });
