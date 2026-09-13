@@ -41,7 +41,7 @@ const RAW_WORDS = [
     "두루마리휴지", "둘레길", "둥지", "드라마", "드레스", "드론", "드라이브", "드라이버", "들판", "들꽃", "들국화", "들쥐", "들소",
     "디딤돌", "디저트", "디스플레이", "딸기잼", "땀방울", "땀띠", "뗏목", "뗏목타기", "똥강아지", "뚝배기", "뜰", "뜰채", "뜰앞", "뜨개질",
     "라일락", "라이터", "라켓", "라자냐", "라이벌", "라운지", "라벨", "락카", "라벤더", "라마", "라인", "라면국물",
-    "람보르기니", "랜턴", "렌즈", "렌터카", "레몬즙", "레몬에이드", "레슬링", "레스토랑", "레이스", "레이저", "레고", "레고블록", "렌즈캡",
+    "람보르기니", "렌턴", "렌즈", "렌터카", "레몬즙", "레몬에이드", "레슬링", "레스토랑", "레이스", "레이저", "레고", "레고블록", "렌즈캡",
     "로봇", "로봇청소기", "로키산맥", "로션", "로프", "로터리", "로비", "로터리시계", "로켓", "로티세리", "로열티", "로드맵", "로맨스",
     "리본", "리듬", "리본끈", "리코더", "리모컨", "리프트", "리조트", "리포트", "리포터", "리본공예", "리코더연주", "리필", "리필팩",
     "마가린", "마구간", "마그네틱", "마스크", "마스크팩", "마술", "마술사", "마라톤선수", "마늘", "마늘밭", "마네킹", "마당", "마당쇠",
@@ -241,7 +241,7 @@ let gameState = {
 function decomposeHangul(word) {
     const CHO = ['ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
     const JOUNG = ['ㅏ','ㅐ','ㅑ','ㅒ','ㅓ','ㅔ','ㅕ','ㅖ','ㅗ','ㅘ','ㅙ','ㅚ','ㅛ','ㅜ','ㅝ','ㅞ','ㅟ','ㅠ','ㅡ','ㅢ','ㅣ'];
-    const JONG = ['','ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄺ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+    const JONG = ['','ㄱ','ㄲ','ㄳ','ㄴ','ㄵ','ㄶ','ㄷ','ㄹ','ㄻ','ㄼ','ㄽ','ㄾ','ㄿ','ㅀ','ㅁ','ㅂ','ㅄ','ㅅ','ㅆ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
 
     let result = [];
     for (let i = 0; i < word.length; i++) {
@@ -398,15 +398,15 @@ io.on('connection', (socket) => {
         const player = gameState.players[gameState.turnIndex];
         if (!player || player.id !== socket.id) return;
 
-        let hitIndexes = [];
-        gameState.decomposedWord.forEach((c, idx) => {
-            if (c === char) hitIndexes.push(idx);
-        });
+        // 선택한 글자가 단어에 존재하는지 확인
+        const isHit = gameState.decomposedWord.includes(char);
 
-        if (hitIndexes.length > 0) {
-            hitIndexes.forEach(idx => {
-                gameState.revealedSlots[idx] = char;
-            });
+        if (isHit) {
+            // 맞췄을 경우: 정답 인덱스가 아닌 가장 앞쪽의 빈 칸('')을 채움
+            const firstEmptyIdx = gameState.revealedSlots.indexOf('');
+            if (firstEmptyIdx !== -1) {
+                gameState.revealedSlots[firstEmptyIdx] = char;
+            }
 
             io.emit('board_update', { slots: gameState.revealedSlots, char, hit: true });
 
@@ -415,9 +415,9 @@ io.on('connection', (socket) => {
                 io.emit('game_won', { winner: player.name, word: gameState.targetWord });
                 return;
             }
-            // 맞췄을 경우 계속 진행하거나 다음 턴으로 넘길 수 있음 (기존은 재타이머 시작)
             startTurnTimer();
         } else {
+            // 틀렸을 경우
             player.lives--;
             io.emit('player_status_update', gameState.players);
             io.to('master').emit('update_player_list', gameState.players);
