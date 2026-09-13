@@ -2,89 +2,149 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>플레이어 화면</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>행맨 - 플레이어 패드</title>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #eef2f5; }
-        .box { background: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
-        .slot-container { display: flex; gap: 6px; margin: 10px 0; flex-wrap: wrap; }
-        .slot { width: 38px; height: 38px; border: 2px solid #444; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: bold; background: #fff; }
-        .keyboard { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 10px; }
-        .btn { padding: 10px; font-size: 16px; font-weight: bold; cursor: pointer; border: 1px solid #ccc; background: #f0f0f0; border-radius: 4px; }
-        .btn:disabled { background: #ddd; cursor: not-allowed; }
-        .feedback { padding: 10px; border-radius: 4px; font-weight: bold; margin-top: 10px; }
-        .hit { background-color: #d4edda; color: #155724; }
-        .miss { background-color: #f8d7da; color: #721c24; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; padding: 15px; max-width: 500px; margin: 0 auto; color: #333; }
+        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 15px; }
+        .status-bar { display: flex; justify-content: space-between; font-weight: bold; font-size: 1rem; align-items: center; }
+        .timer { color: #e67e22; font-size: 1.2rem; }
+        .my-turn { border: 3px solid #2ecc71; }
+        .hidden { display: none; }
+        .slots-grid { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 15px 0; }
+        .slot { width: 36px; height: 44px; border: 2px solid #bdc3c7; border-radius: 6px; font-size: 1.2rem; font-weight: bold; display: flex; align-items: center; justify-content: center; background: #fafafa; }
+        .category-title { font-size: 0.8rem; font-weight: bold; color: #7f8c8d; margin: 10px 0 4px 0; border-bottom: 1px solid #eee; padding-bottom: 2px; }
+        .char-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+        .char-btn { aspect-ratio: 1; border: 1px solid #e0e0e0; border-radius: 6px; background: #f9f9f9; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); justify-content: center; align-items: center; z-index: 100; }
+        .modal-content { background: white; padding: 20px; border-radius: 12px; text-align: center; width: 280px; }
     </style>
 </head>
 <body>
-    <div id="loginArea" class="box">
+
+    <div id="loginArea" class="card">
         <h2>게임 참가</h2>
-        <input type="text" id="playerName" placeholder="닉네임 입력">
-        <button onclick="joinGame()">참가하기</button>
+        <p style="margin: 10px 0;">현재 대기자: <span id="currentPlayers">0</span>명</p>
+        <input type="text" id="nicknameInput" placeholder="닉네임 입력" style="padding: 10px; width: 65%; font-size: 1rem;">
+        <button onclick="joinGame()" style="padding: 10px 15px; font-size: 1rem; font-weight: bold; background: #27ae60; color: white; border: none; border-radius: 6px;">참가</button>
     </div>
 
-    <div id="gameArea" style="display: none;">
-        <div class="box">
-            <h2 id="myInfo">-</h2>
-            <p>남은 시간: <b id="timer">30</b>초 | 현재 턴: <b id="turnInfo">-</b></p>
-            <div id="feedback" class="feedback" style="display: none;"></div>
+    <div id="gameArea" class="card hidden">
+        <div class="status-bar">
+            <span>기회: <span id="myLives">❤️❤️❤️❤️❤️</span></span>
+            <span class="timer">⏱️ <span id="timerVal">30</span>초</span>
+        </div>
+        
+        <div id="turnNotice" style="text-align: center; font-weight: bold; margin: 12px 0;">대기 중...</div>
+        
+        <div class="slots-grid" id="slotsContainer"></div>
+
+        <div id="actionBtns" class="hidden" style="text-align: center; margin-bottom: 12px;">
+            <button onclick="passTurn()" style="background: #f39c12; color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: bold;">턴 넘기기(패스)</button>
         </div>
 
-        <div class="box">
-            <h3>단어 슬롯</h3>
-            <div id="slotContainer" class="slot-container"></div>
+        <div>
+            <div class="category-title">단자음</div>
+            <div class="char-grid" id="grid-consonants"></div>
+            <div class="category-title">쌍자음</div>
+            <div class="char-grid" id="grid-double-consonants"></div>
+            <div class="category-title">단모음</div>
+            <div class="char-grid" id="grid-vowels"></div>
+            <div class="category-title">복모음</div>
+            <div class="char-grid" id="grid-double-vowels"></div>
         </div>
 
-        <div class="box">
-            <h3>자음/모음 선택</h3>
-            <div id="keyboard" class="keyboard"></div>
-            <br>
-            <button class="btn" onclick="passTurn()">턴 넘기기</button>
-        </div>
+        <hr style="margin: 15px 0;">
 
-        <div class="box">
-            <h3>정답 제출</h3>
-            <input type="text" id="answerInput" placeholder="단어 전체 입력">
-            <button onclick="submitAnswer()">제출</button>
-            <p id="penaltyMsg" style="color: red;"></p>
+        <div style="text-align: center;">
+            <input type="text" id="answerInput" placeholder="단어 정답 입력" style="padding: 8px; font-size: 0.95rem;">
+            <button onclick="submitAnswer()" style="padding: 8px 12px; font-weight: bold;">정답 제출</button>
+            <div id="penaltyMsg" style="color: red; font-size: 0.85rem; margin-top: 5px;"></div>
         </div>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
+    <div class="modal" id="selectModal">
+        <div class="modal-content">
+            <h3 id="modalTargetChar">ㄱ</h3>
+            <p style="margin-top: 10px;">이 글자로 제출하시겠습니까?</p>
+            <div style="margin-top: 15px;">
+                <button onclick="confirmSubmit()" style="background: #27ae60; color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: bold;">제출</button>
+                <button onclick="closeModal()" style="padding: 8px 16px; border: none; border-radius: 6px;">취소</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const socket = io();
-        let myName = "";
+        let myName = localStorage.getItem('hangman_nickname') || '';
+        let isMyTurn = false;
+        let selectedChar = null;
 
-        const CHARS = [
-            'ㄱ','ㄲ','ㄴ','ㄷ','ㄸ','ㄹ','ㅁ','ㅂ','ㅃ','ㅅ','ㅆ','ㅇ','ㅈ','ㅉ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ',
-            'ㅏ','ㅐ','ㅑ','ㅒ','ㅓ','ㅔ','ㅕ','ㅖ','ㅗ','ㅘ','ㅙ','ㅚ','ㅛ','ㅜ','ㅝ','ㅞ','ㅟ','ㅠ','ㅡ','ㅢ','ㅣ'
-        ];
+        const consonants = ['ㄱ','ㄴ','ㄷ','ㄹ','ㅁ','ㅂ','ㅅ','ㅇ','ㅈ','ㅊ','ㅋ','ㅌ','ㅍ','ㅎ'];
+        const doubleConsonants = ['ㄲ','ㄸ','ㅃ','ㅆ','ㅉ'];
+        const vowels = ['ㅏ','ㅐ','ㅑ','ㅓ','ㅔ','ㅕ','ㅗ','ㅛ','ㅜ','ㅠ','ㅡ','ㅣ'];
+        const doubleVowels = ['ㅒ','ㅖ','ㅘ','ㅙ','ㅚ','ㅝ','ㅞ','ㅟ','ㅢ'];
 
-        function joinGame() {
-            const name = document.getElementById('playerName').value.trim();
-            if(!name) return alert('닉네임을 입력하세요');
-            myName = name;
-            socket.emit('join_game', name);
-        }
+        window.onload = () => {
+            renderGrid('grid-consonants', consonants);
+            renderGrid('grid-double-consonants', doubleConsonants);
+            renderGrid('grid-vowels', vowels);
+            renderGrid('grid-double-vowels', doubleVowels);
 
-        socket.on('join_success', (player) => {
-            document.getElementById('loginArea').style.display = 'none';
-            document.getElementById('gameArea').style.display = 'block';
-            document.getElementById('myInfo').textContent = `${player.name} (목숨: ${player.lives})`;
-            initKeyboard();
-        });
+            if (myName) {
+                document.getElementById('nicknameInput').value = myName;
+                socket.emit('join_game', myName);
+            }
+        };
 
-        function initKeyboard() {
-            const kb = document.getElementById('keyboard');
-            kb.innerHTML = '';
-            CHARS.forEach(char => {
+        function renderGrid(targetId, list) {
+            const container = document.getElementById(targetId);
+            list.forEach(ch => {
                 const btn = document.createElement('button');
-                btn.className = 'btn';
-                btn.textContent = char;
-                btn.onclick = () => socket.emit('try_char', char);
-                kb.appendChild(btn);
+                btn.className = 'char-btn';
+                btn.innerText = ch;
+                btn.onclick = () => openModal(ch);
+                container.appendChild(btn);
             });
         }
+
+        function openModal(ch) {
+            if(!isMyTurn) return alert("당신의 턴이 아닙니다!");
+            selectedChar = ch;
+            document.getElementById('modalTargetChar').innerText = `'${ch}'`;
+            document.getElementById('selectModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('selectModal').style.display = 'none';
+        }
+
+        function confirmSubmit() {
+            closeModal();
+            if(selectedChar) {
+                socket.emit('try_char', selectedChar);
+            }
+        }
+
+        function joinGame() {
+            myName = document.getElementById('nicknameInput').value.trim();
+            if(!myName) return alert('닉네임을 입력하세요!');
+            localStorage.setItem('hangman_nickname', myName);
+            socket.emit('join_game', myName);
+        }
+
+        socket.on('player_count_update', count => {
+            document.getElementById('currentPlayers').innerText = count;
+        });
+
+        socket.on('join_success', () => {
+            document.getElementById('loginArea').classList.add('hidden');
+            document.getElementById('gameArea').classList.remove('hidden');
+        });
+
+        socket.on('join_error', msg => alert(msg));
 
         socket.on('game_started', (data) => {
             renderSlots(data.slots);
@@ -92,64 +152,82 @@
 
         socket.on('board_update', (data) => {
             renderSlots(data.slots);
-            const fb = document.getElementById('feedback');
-            fb.style.display = 'block';
-            if(data.hit) {
-                fb.className = 'feedback hit';
-                fb.textContent = `'${data.char}' 맞았습니다!`;
+        });
+
+        function renderSlots(slots) {
+            const container = document.getElementById('slotsContainer');
+            container.innerHTML = slots.map(s => `<div class="slot">${s || '_'}</div>`).join('');
+        }
+
+        socket.on('turn_update', (data) => {
+            isMyTurn = (data.currentTurnPlayer.name === myName);
+            const notice = document.getElementById('turnNotice');
+            const card = document.getElementById('gameArea');
+
+            if(isMyTurn) {
+                notice.innerText = "🎯 당신의 턴입니다!";
+                notice.style.color = "#27ae60";
+                card.classList.add('my-turn');
+                document.getElementById('actionBtns').classList.remove('hidden');
             } else {
-                fb.className = 'feedback miss';
-                fb.textContent = `'${data.char}' 틀렸습니다! (목숨 차감)`;
+                notice.innerText = `⏳ ${data.currentTurnPlayer.name} 님의 턴 진행 중...`;
+                notice.style.color = "#333";
+                card.classList.remove('my-turn');
+                document.getElementById('actionBtns').classList.add('hidden');
             }
         });
 
-        socket.on('timer_tick', (time) => {
-            document.getElementById('timer').textContent = time;
+        socket.on('timer_tick', time => {
+            document.getElementById('timerVal').innerText = time;
         });
 
-        socket.on('turn_update', (data) => {
-            const isMyTurn = data.currentTurnPlayer && data.currentTurnPlayer.name === myName;
-            document.getElementById('turnInfo').textContent = data.currentTurnPlayer ? data.currentTurnPlayer.name : '-';
-            
-            const btns = document.querySelectorAll('.keyboard .btn');
-            btns.forEach(btn => btn.disabled = !isMyTurn);
-        });
+        function passTurn() {
+            if(!isMyTurn) return;
+            socket.emit('pass_turn');
+        }
+
+        function submitAnswer() {
+            const ans = document.getElementById('answerInput').value.trim();
+            if(!ans) return;
+            socket.emit('try_answer', ans);
+        }
 
         socket.on('player_status_update', (players) => {
             const me = players.find(p => p.name === myName);
             if(me) {
-                document.getElementById('myInfo').textContent = `${me.name} (목숨: ${me.lives})`;
+                document.getElementById('myLives').innerText = '❤️'.repeat(Math.max(0, me.lives));
             }
         });
 
-        function passTurn() { socket.emit('pass_turn'); }
-        function submitAnswer() {
-            const ans = document.getElementById('answerInput').value.trim();
-            if(ans) socket.emit('try_answer', ans);
-        }
-
-        socket.on('answer_failed', (sec) => {
-            document.getElementById('penaltyMsg').textContent = `정답 틀림! ${sec}초간 정답 입력 불가`;
+        socket.on('answer_failed', (seconds) => {
+            alert(`오답입니다! ${seconds}초 동안 정답 재도전 불가.`);
+            let left = seconds;
+            const msg = document.getElementById('penaltyMsg');
+            const interval = setInterval(() => {
+                left--;
+                msg.innerText = `재도전 쿨타임: ${left}초 남음`;
+                if(left <= 0) {
+                    clearInterval(interval);
+                    msg.innerText = '';
+                }
+            }, 1000);
         });
 
         socket.on('eliminated', () => {
-            alert('목숨을 모두 잃어 탈락했습니다.');
+            alert('기회를 모두 소진하여 탈락하셨습니다.');
+            localStorage.removeItem('hangman_nickname');
+            location.reload();
         });
 
         socket.on('game_won', (data) => {
-            alert(`축하합니다! ${data.winner}님이 정답 [${data.word}]을 맞췄습니다!`);
+            alert(`🎉 [${data.winner}] 님이 정답 [${data.word}]을(를) 맞췄습니다!`);
         });
 
-        function renderSlots(slots) {
-            const container = document.getElementById('slotContainer');
-            container.innerHTML = '';
-            slots.forEach(char => {
-                const div = document.createElement('div');
-                div.className = 'slot';
-                div.textContent = char || '';
-                container.appendChild(div);
-            });
-        }
+        socket.on('game_reset', () => {
+            localStorage.removeItem('hangman_nickname');
+            alert('출제자가 게임을 초기화했습니다.');
+            location.reload();
+        });
     </script>
 </body>
 </html>
